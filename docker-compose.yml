@@ -1,0 +1,102 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: busreserve-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-busreserve}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-busreserve_dev_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-busreserve}
+    volumes:
+      - busreserve_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - busreserve_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE:-busreserve-backend:local}
+    container_name: busreserve-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLASK_ENV: ${FLASK_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:-local-dev-change-in-production}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-busreserve}:${POSTGRES_PASSWORD:-busreserve_dev_change_me}@postgres:5432/${POSTGRES_DB:-busreserve}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SEED_ON_STARTUP: ${SEED_ON_STARTUP:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 25s
+    networks:
+      - busreserve_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    image: ${FRONTEND_IMAGE:-busreserve-frontend:local}
+    container_name: busreserve-frontend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - busreserve_net
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: busreserve-nginx
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - busreserve_net
+
+volumes:
+  busreserve_pgdata:
+    name: busreserve_pgdata
+
+networks:
+  busreserve_net:
+    name: busreserve_net
+    driver: bridge

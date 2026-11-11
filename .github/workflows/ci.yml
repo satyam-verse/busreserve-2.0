@@ -1,0 +1,213 @@
+name: BusReserve CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  backend-ci:
+    name: Lint, Test & Security Audit
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: busreserve
+          POSTGRES_PASSWORD: busreserve_ci_password
+          POSTGRES_DB: busreserve_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U busreserve -d busreserve_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      FLASK_ENV: testing
+      TEST_DATABASE_URL: postgresql+psycopg2://busreserve:busreserve_ci_password@localhost:5432/busreserve_test
+      DATABASE_URL: postgresql+psycopg2://busreserve:busreserve_ci_password@localhost:5432/busreserve_test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run formatting checks
+        working-directory: backend
+        run: ruff format --check .
+
+      - name: Run linting checks
+        working-directory: backend
+        run: ruff check .
+
+      - name: Verify database migrations on PostgreSQL
+        working-directory: backend
+        env:
+          FLASK_APP: wsgi.py
+          FLASK_ENV: development
+        run: |
+          flask db upgrade
+          flask seed
+          flask seed
+
+      - name: Run automated API tests
+        working-directory: backend
+        run: pytest tests/test_health.py tests/test_routes_and_trips.py tests/test_bookings.py
+
+      - name: Run PostgreSQL concurrency tests
+        working-directory: backend
+        run: pytest tests/test_concurrency.py
+
+      - name: Run Python dependency vulnerability scan
+        working-directory: backend
+        run: pip-audit
+
+  frontend-ci:
+    name: Frontend Build Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package*.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci || npm install
+
+      - name: Build frontend production bundle
+        working-directory: frontend
+        run: npm run build
+
+  container-build-and-publish:
+    name: Build, Scan & Publish Images
+    needs: [backend-ci, frontend-ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      REGISTRY: ghcr.io
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute lowercase image names
+        id: names
+        run: |
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "backend_image=${REGISTRY}/${OWNER_LOWER}/busreserve-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${REGISTRY}/${OWNER_LOWER}/busreserve-frontend" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata for backend
+        id: meta_backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.names.outputs.backend_image }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value={{sha}},enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Extract Docker metadata for frontend
+        id: meta_frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.names.outputs.frontend_image }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value={{sha}},enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build backend Docker image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          load: true
+          tags: busreserve-backend:ci-scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan backend container image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: busreserve-backend:ci-scan
+          format: table
+          exit-code: "0"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      - name: Build and push backend image to GHCR
+        id: push_backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
+          tags: ${{ steps.meta_backend.outputs.tags }}
+          labels: ${{ steps.meta_backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image to GHCR
+        id: push_frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
+          tags: ${{ steps.meta_frontend.outputs.tags }}
+          labels: ${{ steps.meta_frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Record published image digests in job summary
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: |
+          {
+            echo "## Published Container Images"
+            echo "- **Backend Image**: \`${{ steps.names.outputs.backend_image }}\`"
+            echo "- **Backend Digest**: \`${{ steps.push_backend.outputs.digest }}\`"
+            echo "- **Frontend Image**: \`${{ steps.names.outputs.frontend_image }}\`"
+            echo "- **Frontend Digest**: \`${{ steps.push_frontend.outputs.digest }}\`"
+            echo "- **Commit SHA**: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

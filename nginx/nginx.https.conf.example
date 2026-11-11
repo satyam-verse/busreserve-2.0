@@ -1,0 +1,91 @@
+# Production HTTPS Nginx configuration template for BusReserve.
+# Replace `busreserve.example.com` and mount valid TLS certificates
+# (e.g., Let's Encrypt / certbot live certificates) into /etc/letsencrypt/.
+# Do NOT use self-signed/fake certificates in production.
+
+map $http_x_request_id $correlation_id {
+    default $http_x_request_id;
+    ""      $request_id;
+}
+
+upstream busreserve_backend {
+    server backend:5000;
+    keepalive 32;
+}
+
+upstream busreserve_frontend {
+    server frontend:80;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name busreserve.example.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name busreserve.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/busreserve.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/busreserve.example.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    client_max_body_size 1m;
+
+    location /health/ {
+        proxy_pass http://busreserve_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Request-ID $correlation_id;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 15s;
+        proxy_read_timeout 15s;
+    }
+
+    location /api/ {
+        proxy_pass http://busreserve_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Request-ID $correlation_id;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+    }
+
+    location / {
+        proxy_pass http://busreserve_frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+    }
+}
