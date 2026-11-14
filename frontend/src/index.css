@@ -2,11 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --br-navy-950: #06101e;
+  --br-navy-900: #0b1f3a;
+  --br-emerald: #10b981;
+  --br-ivory: #faf8f3;
+  --br-brass: #c88a2e;
+}
+
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     font-family: "Inter", system-ui, -apple-system, sans-serif;
-    background-color: #faf8f3;
-    color: #0b1f3a;
+    background-color: var(--br-ivory);
+    color: var(--br-navy-950);
+    overflow-x: hidden;
   }
 
   h1,
@@ -14,5 +27,130 @@
   h3,
   h4 {
     font-family: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  }
+
+  :focus-visible {
+    outline: 2px solid #10b981;
+    outline-offset: 2px;
+  }
+}
+
+/* Editorial dot-grid backdrop for light transit canvases */
+.bg-transit-grid {
+  background-image: radial-gradient(rgba(11, 31, 58, 0.08) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Deep midnight mesh grid for hero & operations portals */
+.bg-navy-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+@keyframes br-dash-flow {
+  from {
+    stroke-dashoffset: 36;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes br-float-slow {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes br-fade-up {
+  from {
+    opacity: 0.92;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes br-pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.animate-dash-flow {
+  stroke-dasharray: 7 5;
+  animation: br-dash-flow 1.8s linear infinite;
+}
+
+.animate-float-slow {
+  animation: br-float-slow 5.5s ease-in-out infinite;
+}
+
+.animate-fade-up {
+  animation: br-fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-up-delay-1 {
+  animation: br-fade-up 0.55s 0.08s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-up-delay-2 {
+  animation: br-fade-up 0.55s 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-pulse-ring {
+  animation: br-pulse-ring 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Boarding-pass perforated ticket notch effect */
+.ticket-notch-left,
+.ticket-notch-right {
+  position: relative;
+}
+
+@media print {
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-dash-flow,
+  .animate-float-slow,
+  .animate-fade-up,
+  .animate-fade-up-delay-1,
+  .animate-fade-up-delay-2,
+  .animate-pulse-ring {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
   }
 }

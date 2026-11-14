@@ -1,0 +1,54 @@
+groups:
+  - name: busreserve_alerts
+    rules:
+      - alert: BusReserveBackendDown
+        expr: up{job="busreserve-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BusReserve backend service is down"
+          description: "Backend container at {{ $labels.instance }} has been unreachable for more than 1 minute."
+
+      - alert: HighHttp5xxRate
+        expr: >-
+          sum(rate(busreserve_http_requests_total{status_code=~"5.."}[5m]))
+          / sum(rate(busreserve_http_requests_total[5m])) * 100 > 2
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated HTTP 5xx error rate"
+          description: "More than 2% of HTTP requests returned 5xx errors over the last 5 minutes."
+
+      - alert: HighRequestLatencyP95
+        expr: >-
+          histogram_quantile(0.95, sum(rate(busreserve_http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 HTTP latency exceeds 500ms"
+          description: "95th percentile latency across BusReserve endpoints is higher than 500ms."
+
+      - alert: DatabasePoolNearExhaustion
+        expr: >-
+          busreserve_db_connections{metric="checked_out"}
+          / busreserve_db_connections{metric="size"} > 0.85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connection pool near exhaustion"
+          description: "More than 85% of allocated SQLAlchemy database connections are in active use."
+
+      - alert: PaymentFailureSpike
+        expr: >-
+          sum(rate(busreserve_payment_transactions_total{status="FAILED"}[10m]))
+          / sum(rate(busreserve_payment_transactions_total[10m])) * 100 > 15
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High payment transaction failure rate"
+          description: "Over 15% of payment transactions failed in the last 10 minutes."

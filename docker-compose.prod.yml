@@ -1,0 +1,182 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: busreserve-postgres
+    restart: always
+    stop_grace_period: 15s
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-busreserve}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-busreserve_dev_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-busreserve}
+      TZ: ${APP_TIMEZONE:-Asia/Kolkata}
+    volumes:
+      - busreserve_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - busreserve_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE:-busreserve-backend:latest}
+    container_name: busreserve-backend
+    restart: always
+    stop_grace_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLASK_ENV: ${FLASK_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      ALLOW_LOCAL_MAIL_PREVIEW: ${ALLOW_LOCAL_MAIL_PREVIEW:-false}
+      RATELIMIT_ENABLED: ${RATELIMIT_ENABLED:-true}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-busreserve}:${POSTGRES_PASSWORD:-busreserve_dev_change_me}@postgres:5432/${POSTGRES_DB:-busreserve}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SEED_ON_STARTUP: ${SEED_ON_STARTUP:-false}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+      TZ: ${APP_TIMEZONE:-Asia/Kolkata}
+      BOOKING_HORIZON_DAYS: ${BOOKING_HORIZON_DAYS:-90}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      GEMINI_FALLBACK_MODEL: ${GEMINI_FALLBACK_MODEL:-}
+      GEMINI_ENABLED: ${GEMINI_ENABLED:-true}
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-15}
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}
+      AI_DAILY_REQUEST_LIMIT: ${AI_DAILY_REQUEST_LIMIT:-200}
+      AI_USER_DAILY_LIMIT: ${AI_USER_DAILY_LIMIT:-50}
+      AI_MAX_INPUT_LENGTH: ${AI_MAX_INPUT_LENGTH:-1000}
+      AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-600}
+      AI_HISTORY_LIMIT: ${AI_HISTORY_LIMIT:-20}
+      AI_RECOVERY_COOLDOWN_SECONDS: ${AI_RECOVERY_COOLDOWN_SECONDS:-60}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 25s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 768M
+        reservations:
+          cpus: "0.20"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - busreserve_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    image: ${FRONTEND_IMAGE:-busreserve-frontend:latest}
+    container_name: busreserve-frontend
+    restart: always
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - busreserve_net
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: busreserve-nginx
+    restart: always
+    stop_grace_period: 10s
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+      - "${NGINX_SSL_PORT:-8443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - busreserve_net
+
+volumes:
+  busreserve_pgdata:
+    name: busreserve_pgdata
+
+networks:
+  busreserve_net:
+    name: busreserve_net
+    driver: bridge

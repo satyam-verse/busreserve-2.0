@@ -1,0 +1,50 @@
+{
+  "Alarms": [
+    {
+      "AlarmName": "BusReserve-Prod-High5xxErrorRate",
+      "AlarmDescription": "Triggers when ALB returns > 1% 5xx errors over a 5-minute evaluation period",
+      "MetricName": "HTTPCode_Target_5XX_Count",
+      "Namespace": "AWS/ApplicationELB",
+      "Statistic": "Sum",
+      "Period": 300,
+      "EvaluationPeriods": 1,
+      "Threshold": 10,
+      "ComparisonOperator": "GreaterThanThreshold",
+      "TreatMissingData": "notBreaching"
+    },
+    {
+      "AlarmName": "BusReserve-Prod-HighTargetLatency",
+      "AlarmDescription": "Triggers when TargetResponseTime P95 exceeds 500ms for 5 minutes",
+      "MetricName": "TargetResponseTime",
+      "Namespace": "AWS/ApplicationELB",
+      "ExtendedStatistic": "p95",
+      "Period": 300,
+      "EvaluationPeriods": 1,
+      "Threshold": 0.5,
+      "ComparisonOperator": "GreaterThanThreshold",
+      "TreatMissingData": "notBreaching"
+    },
+    {
+      "AlarmName": "BusReserve-Prod-RdsHighCpu",
+      "AlarmDescription": "Triggers when PostgreSQL RDS CPU utilization exceeds 80% for 2 consecutive periods",
+      "MetricName": "CPUUtilization",
+      "Namespace": "AWS/RDS",
+      "Statistic": "Average",
+      "Period": 300,
+      "EvaluationPeriods": 2,
+      "Threshold": 80,
+      "ComparisonOperator": "GreaterThanThreshold"
+    },
+    {
+      "AlarmName": "BusReserve-Prod-RdsLowStorage",
+      "AlarmDescription": "Triggers when PostgreSQL RDS free storage falls below 5 GB",
+      "MetricName": "FreeStorageSpace",
+      "Namespace": "AWS/RDS",
+      "Statistic": "Minimum",
+      "Period": 300,
+      "EvaluationPeriods": 1,
+      "Threshold": 5368709120,
+      "ComparisonOperator": "LessThanThreshold"
+    }
+  ]
+}

@@ -1,7 +1,11 @@
 """Pytest fixtures wired to a real PostgreSQL test database."""
 
 import os
-from datetime import date, time, timedelta
+
+os.environ.setdefault("SEED_DEMO_ADMIN_PASSWORD", "TestAdminPass999!")
+os.environ.setdefault("SEED_DEMO_USER_PASSWORD", "TestUserPass999!")
+
+from datetime import time, timedelta
 from decimal import Decimal
 
 import pytest
@@ -10,6 +14,7 @@ from sqlalchemy import text
 from app import create_app
 from app.extensions import db
 from app.models import Route, RouteStop, Trip, TripSeat
+from app.utils.timezone import get_app_today
 
 
 @pytest.fixture(scope="session")
@@ -51,8 +56,10 @@ def clean_database(app):
         with db.engine.begin() as conn:
             conn.execute(
                 text(
-                    "TRUNCATE TABLE bookings, trip_seats, trips, route_stops, routes "
-                    "RESTART IDENTITY CASCADE"
+                    "TRUNCATE TABLE notifications, payment_transactions, "
+                    "ai_usage_daily, ai_conversation_messages, bookings, "
+                    "trip_seats, trips, bus_schedules, buses, route_stops, routes, cities, "
+                    "auth_sessions, users RESTART IDENTITY CASCADE"
                 )
             )
     yield
@@ -97,8 +104,9 @@ def sample_data(app):
         db.session.add_all(pr_stops + pg_stops)
         db.session.flush()
 
-        upcoming_date = date.today() + timedelta(days=2)
-        past_date = date.today() - timedelta(days=2)
+        today_ist = get_app_today()
+        upcoming_date = today_ist + timedelta(days=2)
+        past_date = today_ist - timedelta(days=2)
 
         upcoming_trip = Trip(
             route_id=route_pr.id,

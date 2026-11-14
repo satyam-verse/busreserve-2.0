@@ -1,22 +1,87 @@
-import { Activity, Bus, RefreshCw, ShieldAlert, Ticket, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  LayoutDashboard,
+  MapPin,
+  Route as RouteIcon,
+  Bus,
+  CalendarClock,
+  Ticket,
+  CreditCard,
+  Users,
+  LogOut,
+  AlertCircle,
+  CheckCircle2,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 import { busApi } from "../services/api";
+import AdminAnalyticsPanel from "../components/admin/AdminAnalyticsPanel";
+import AdminCitiesTab from "../components/admin/AdminCitiesTab";
+import AdminRoutesTab from "../components/admin/AdminRoutesTab";
+import AdminBusesTab from "../components/admin/AdminBusesTab";
+import AdminSchedulesTab from "../components/admin/AdminSchedulesTab";
+import AdminBookingsTab from "../components/admin/AdminBookingsTab";
+import AdminPaymentTab from "../components/admin/AdminPaymentTab";
+import AdminUsersTab from "../components/admin/AdminUsersTab";
+import AdminAiTab from "../components/admin/AdminAiTab";
+
+const ADMIN_TABS = [
+  { id: "analytics", label: "Analytics & Overview", icon: LayoutDashboard },
+  { id: "cities", label: "Cities", icon: MapPin },
+  { id: "routes", label: "Routes", icon: RouteIcon },
+  { id: "buses", label: "Buses", icon: Bus },
+  { id: "schedules", label: "Schedules", icon: CalendarClock },
+  { id: "bookings", label: "Bookings & Refunds", icon: Ticket },
+  { id: "payments", label: "Payments & Financials", icon: CreditCard },
+  { id: "users", label: "Users & Roles", icon: Users },
+  { id: "ai_copilot", label: "AI Copilot", icon: Sparkles },
+];
 
 export default function AdminOverviewPage() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { user, logout } = useAuth();
+  const { tab: paramTab } = useParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  const validTabIds = new Set(ADMIN_TABS.map((t) => t.id));
+  const resolveTab = () => {
+    if (paramTab && validTabIds.has(paramTab)) return paramTab;
+    const queryTab = searchParams.get("tab");
+    if (queryTab && validTabIds.has(queryTab)) return queryTab;
+    return "analytics";
+  };
+
+  const [activeTab, setActiveTabState] = useState(resolveTab);
+  const [banner, setBanner] = useState({ type: "", text: "" });
+  const [overview, setOverview] = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+
+  useEffect(() => {
+    const target = resolveTab();
+    setActiveTabState(target);
+  }, [paramTab, searchParams]);
+
+  const handleTabChange = (newTab) => {
+    setActiveTabState(newTab);
+    setBanner({ type: "", text: "" });
+    navigate(`/admin/${newTab}`);
+  };
+
+  const notify = useCallback((type, text) => {
+    setBanner({ type, text });
+  }, []);
 
   const loadOverview = useCallback(async () => {
+    setOverviewLoading(true);
     try {
-      setLoading(true);
-      setError("");
-      const resp = await busApi.getAdminOverview();
-      setData(resp);
+      const data = await busApi.getAdminAnalytics();
+      setOverview(data);
     } catch (err) {
-      setError(err.message || "Failed to load operational overview.");
+      setBanner({ type: "error", text: err.message || "Failed to load analytics." });
     } finally {
-      setLoading(false);
+      setOverviewLoading(false);
     }
   }, []);
 
@@ -24,180 +89,127 @@ export default function AdminOverviewPage() {
     loadOverview();
   }, [loadOverview]);
 
-  const summary = data?.summary;
+  async function handleCancelTrip(tripId) {
+    setBanner({ type: "", text: "" });
+    try {
+      const data = await busApi.cancelAdminTrip(tripId);
+      setBanner({ type: "success", text: data.message || `Trip #${tripId} cancelled.` });
+      await loadOverview();
+    } catch (err) {
+      setBanner({ type: "error", text: err.message || "Could not cancel trip." });
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mb-6 flex flex-col justify-between gap-4 rounded-2xl border border-navy-900/10 bg-navy-950 p-6 text-white shadow-sm sm:flex-row sm:items-center">
         <div>
-          <h1 className="font-display text-2xl font-bold text-navy-900">
-            Operations Overview
-          </h1>
-          <p className="text-sm text-slate-500">
-            Live trip capacity, seat occupancy, and masked booking telemetry
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-300">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            <span>BusReserve Admin Control Centre • RBAC Enforced</span>
+          </div>
+          <h1 className="mt-2 text-2xl font-bold">Fleet, Network &amp; Operations Console</h1>
+          <p className="text-sm text-cream-200/80">
+            Signed in as {user?.full_name} ({user?.email})
           </p>
         </div>
+
         <button
           type="button"
-          onClick={loadOverview}
-          className="inline-flex items-center gap-2 rounded-xl border border-cream-200 bg-white px-4 py-2 text-sm font-semibold text-navy-900 shadow-sm transition hover:bg-cream-50"
+          onClick={logout}
+          className="inline-flex items-center gap-2 self-start rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20 sm:self-auto"
         >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          <span>Refresh</span>
+          <LogOut className="h-4 w-4" />
+          <span>Admin Logout</span>
         </button>
       </div>
 
-      <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-medium text-amber-900">
-        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-        <div>
-          <p className="font-bold">Demo-Only Local Operational View (No Auth)</p>
-          <p className="mt-0.5 text-amber-800">
-            This demonstration dashboard intentionally masks passenger names, emails, and omits
-            phone numbers so private customer data is never exposed publicly.
-          </p>
+      {banner.text ? (
+        <div
+          className={`mb-6 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${
+            banner.type === "error"
+              ? "border-red-200 bg-red-50 text-red-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-900"
+          }`}
+        >
+          {banner.type === "error" ? (
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          )}
+          <span>{banner.text}</span>
         </div>
+      ) : null}
+
+      <div
+        role="tablist"
+        aria-label="Admin console sections"
+        className="mb-6 flex gap-2 overflow-x-auto border-b border-navy-900/10 pb-3"
+      >
+        {ADMIN_TABS.map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => handleTabChange(tab.id)}
+              className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-semibold transition sm:text-sm ${
+                active
+                  ? "bg-navy-950 text-white shadow-sm"
+                  : "bg-white text-navy-900/75 hover:bg-navy-900/5"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {error && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800">
-          {error}
-        </div>
-      )}
+      {activeTab === "analytics" ? (
+        <AdminAnalyticsPanel
+          overview={overview}
+          loading={overviewLoading}
+          onCancelTrip={handleCancelTrip}
+        />
+      ) : null}
 
-      {summary && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-cream-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400">
-              <span>Scheduled Trips</span>
-              <Bus className="h-4 w-4 text-emerald-600" />
-            </div>
-            <p className="mt-2 font-display text-3xl font-extrabold text-navy-900">
-              {summary.total_trips}
-            </p>
-          </div>
+      {activeTab === "cities" ? (
+        <AdminCitiesTab onNotify={notify} onChanged={loadOverview} />
+      ) : null}
 
-          <div className="rounded-2xl border border-cream-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400">
-              <span>Total Bookings</span>
-              <Ticket className="h-4 w-4 text-navy-700" />
-            </div>
-            <p className="mt-2 font-display text-3xl font-extrabold text-navy-900">
-              {summary.total_bookings}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              {summary.confirmed_bookings} confirmed • {summary.cancelled_bookings} cancelled
-            </p>
-          </div>
+      {activeTab === "routes" ? (
+        <AdminRoutesTab onNotify={notify} onChanged={loadOverview} />
+      ) : null}
 
-          <div className="rounded-2xl border border-cream-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400">
-              <span>Occupied Seats</span>
-              <Users className="h-4 w-4 text-emerald-600" />
-            </div>
-            <p className="mt-2 font-display text-3xl font-extrabold text-navy-900">
-              {summary.occupied_seats}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              of {summary.total_seats} total fleet seats
-            </p>
-          </div>
+      {activeTab === "buses" ? (
+        <AdminBusesTab onNotify={notify} onChanged={loadOverview} />
+      ) : null}
 
-          <div className="rounded-2xl border border-cream-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400">
-              <span>Fleet Occupancy</span>
-              <Activity className="h-4 w-4 text-emerald-600" />
-            </div>
-            <p className="mt-2 font-display text-3xl font-extrabold text-emerald-700">
-              {summary.occupancy_rate}%
-            </p>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-cream-100">
-              <div
-                className="h-full rounded-full bg-emerald-500"
-                style={{ width: `${Math.min(summary.occupancy_rate, 100)}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {activeTab === "schedules" ? (
+        <AdminSchedulesTab
+          horizonDays={overview?.summary?.booking_horizon_days || 90}
+          onNotify={notify}
+          onChanged={loadOverview}
+        />
+      ) : null}
 
-      {data && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          <div className="rounded-2xl border border-cream-200 bg-white p-5 shadow-sm lg:col-span-6">
-            <h2 className="mb-4 font-display text-lg font-bold text-navy-900">
-              Recent Booking Records (Masked PII)
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-cream-200 text-slate-400 uppercase">
-                    <th className="py-2 pr-3">PNR</th>
-                    <th className="py-2 pr-3">Route</th>
-                    <th className="py-2 pr-3">Seat</th>
-                    <th className="py-2 pr-3">Passenger</th>
-                    <th className="py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-cream-100">
-                  {data.recent_bookings.map((row) => (
-                    <tr key={row.pnr} className="hover:bg-cream-50">
-                      <td className="py-2.5 pr-3 font-mono font-bold text-navy-900">{row.pnr}</td>
-                      <td className="py-2.5 pr-3 text-slate-600">{row.route_name}</td>
-                      <td className="py-2.5 pr-3 font-semibold">{row.seat_number}</td>
-                      <td className="py-2.5 pr-3 text-slate-600">
-                        {row.passenger_display}
-                        <div className="text-[10px] text-slate-400">
-                          {row.passenger_email_masked}
-                        </div>
-                      </td>
-                      <td className="py-2.5">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            row.status === "CONFIRMED"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-rose-100 text-rose-800"
-                          }`}
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      {activeTab === "bookings" ? (
+        <AdminBookingsTab onNotify={notify} onChanged={loadOverview} />
+      ) : null}
 
-          <div className="rounded-2xl border border-cream-200 bg-white p-5 shadow-sm lg:col-span-6">
-            <h2 className="mb-4 font-display text-lg font-bold text-navy-900">
-              Trip Seat Occupancy Summary
-            </h2>
-            <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
-              {data.trip_occupancy.slice(0, 12).map((item) => (
-                <div
-                  key={item.trip_id}
-                  className="rounded-xl border border-cream-100 bg-cream-50 p-3 text-xs"
-                >
-                  <div className="flex items-center justify-between font-semibold text-navy-900">
-                    <span>{item.route_name}</span>
-                    <span>
-                      {item.occupied_seats}/{item.total_seats} ({item.occupancy_rate}%)
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-[11px] text-slate-500">
-                    {item.operator_name} • {item.travel_date} at {item.departure_time}
-                  </p>
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-cream-200">
-                    <div
-                      className="h-full rounded-full bg-emerald-600"
-                      style={{ width: `${Math.min(item.occupancy_rate, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {activeTab === "payments" ? (
+        <AdminPaymentTab onNotify={notify} />
+      ) : null}
+
+      {activeTab === "users" ? (
+        <AdminUsersTab onNotify={notify} onChanged={loadOverview} />
+      ) : null}
+
+      {activeTab === "ai_copilot" ? <AdminAiTab onNotify={notify} /> : null}
     </div>
   );
 }

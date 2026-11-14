@@ -1,36 +1,68 @@
-# Python
+# Python & Virtual Environments
 __pycache__/
 *.py[cod]
 *$py.class
 .venv/
 venv/
+env/
+ENV/
 .pytest_cache/
 .ruff_cache/
 .coverage
 htmlcov/
+*.egg-info/
+.eggs/
 
-# Environment & secrets
+# Environment & Secret Protection
 .env
 .env.*
 !.env.example
 *.pem
 *.key
 *.crt
+*.pfx
+*.p12
+*.cer
+*.der
+id_rsa
+id_ecdsa
+id_ed25519
+*.secret
 
-# Node / Frontend
+# Frontend / Node
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Database backups & runtime artifacts
+# Database Backups & Temporary Artifacts
 backups/
 *.sql
 *.dump
 *.tar.gz
-logs/
+*.bak
+*.sqlite
+*.sqlite3
+*.db
 
-# OS / IDE
+# Logs & Monitoring
+logs/
+*.log
+prometheus_data/
+grafana_data/
+
+# OS & Editor Specifics
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# AI Assistant & Local Scratch Directories
+.system_generated/
+scratch/

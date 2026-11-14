@@ -4,10 +4,58 @@ import json
 import logging
 import sys
 import time
+import urllib.parse
 import uuid
 from datetime import UTC, datetime
 
 from flask import Flask, g, has_request_context, request
+
+SENSITIVE_PATTERNS = (
+    "token",
+    "password",
+    "secret",
+    "authorization",
+    "cookie",
+    "key",
+    "api_key",
+    "credential",
+    "bearer",
+    "session",
+    "signature",
+    "card",
+    "cvv",
+    "pan",
+    "pin",
+)
+
+
+def sanitize_sensitive_value(key: str, value: object) -> object:
+    """Recursively scrub sensitive keys matching security patterns."""
+    key_lower = str(key).lower()
+    if any(pat in key_lower for pat in SENSITIVE_PATTERNS):
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        return {str(k): sanitize_sensitive_value(str(k), v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [sanitize_sensitive_value(key, item) for item in value]
+    return value
+
+
+def sanitize_query_string(qs: str | None) -> str | None:
+    """Parse URL query strings and mask sensitive parameter values."""
+    if not qs:
+        return None
+    try:
+        pairs = urllib.parse.parse_qsl(qs, keep_blank_values=True)
+        sanitized_pairs: list[tuple[str, str]] = []
+        for k, v in pairs:
+            if any(pat in k.lower() for pat in SENSITIVE_PATTERNS):
+                sanitized_pairs.append((k, "[REDACTED]"))
+            else:
+                sanitized_pairs.append((k, v))
+        return urllib.parse.urlencode(sanitized_pairs)
+    except Exception:
+        return "[UNPARSEABLE_QUERY]"
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -54,7 +102,7 @@ class JsonLogFormatter(logging.Formatter):
 
         for key, value in record.__dict__.items():
             if key not in self.RESERVED_ATTRS and not key.startswith("_"):
-                payload[key] = value
+                payload[key] = sanitize_sensitive_value(key, value)
 
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
@@ -97,13 +145,14 @@ def configure_logging(app: Flask) -> None:
         start_time = getattr(g, "request_start_time", None)
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2) if start_time else None
 
+        raw_qs = request.query_string.decode("utf-8", errors="ignore") or None
         app.logger.info(
             "http_request",
             extra={
                 "status_code": response.status_code,
                 "duration_ms": duration_ms,
                 "remote_addr": request.headers.get("X-Forwarded-For", request.remote_addr),
-                "query_string": request.query_string.decode("utf-8", errors="ignore") or None,
+                "query_string": sanitize_query_string(raw_qs),
             },
         )
         return response

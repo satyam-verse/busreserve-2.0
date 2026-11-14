@@ -1,0 +1,30 @@
+{
+  "Description": "BusReserve Production Security Group (Least Privilege Ingress)",
+  "GroupName": "busreserve-prod-sg",
+  "IpPermissions": [
+    {
+      "IpProtocol": "tcp",
+      "FromPort": 80,
+      "ToPort": 80,
+      "IpRanges": [{ "CidrIp": "0.0.0.0/0", "Description": "HTTP Public Ingress" }]
+    },
+    {
+      "IpProtocol": "tcp",
+      "FromPort": 443,
+      "ToPort": 443,
+      "IpRanges": [{ "CidrIp": "0.0.0.0/0", "Description": "HTTPS Public Ingress" }]
+    },
+    {
+      "IpProtocol": "tcp",
+      "FromPort": 22,
+      "ToPort": 22,
+      "IpRanges": [{ "CidrIp": "0.0.0.0/0", "Description": "SSH Operator Administration (Restrict to Admin IP in production)" }]
+    }
+  ],
+  "IpPermissionsEgress": [
+    {
+      "IpProtocol": "-1",
+      "IpRanges": [{ "CidrIp": "0.0.0.0/0", "Description": "Outbound Internet Traffic" }]
+    }
+  ]
+}

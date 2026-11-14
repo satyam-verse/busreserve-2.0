@@ -3,6 +3,7 @@
 from typing import Any
 
 from flask import Flask, g, jsonify
+from flask_limiter.errors import RateLimitExceeded
 from marshmallow import ValidationError as MarshmallowValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.exceptions import HTTPException
@@ -45,6 +46,16 @@ class ConflictError(APIError):
     error_code = "conflict"
 
 
+class UnauthorizedError(APIError):
+    status_code = 401
+    error_code = "unauthorized"
+
+
+class ForbiddenError(APIError):
+    status_code = 403
+    error_code = "forbidden"
+
+
 def error_response(
     message: str,
     status_code: int,
@@ -80,6 +91,14 @@ def register_error_handlers(app: Flask) -> None:
             400,
             "validation_error",
             details=err.messages,
+        )
+
+    @app.errorhandler(RateLimitExceeded)
+    def handle_rate_limit(err: RateLimitExceeded):
+        return error_response(
+            "Too many requests. Please wait a moment before trying again.",
+            429,
+            "rate_limit_exceeded",
         )
 
     @app.errorhandler(HTTPException)

@@ -14,6 +14,8 @@ class Route(db.Model):
     name = db.Column(db.String(150), nullable=False, unique=True)
     source = db.Column(db.String(100), nullable=False, index=True)
     destination = db.Column(db.String(100), nullable=False, index=True)
+    distance_km = db.Column(db.Integer, nullable=True)
+    estimated_duration_minutes = db.Column(db.Integer, nullable=True)
 
     stops = db.relationship(
         "RouteStop",
@@ -27,6 +29,14 @@ class Route(db.Model):
     __table_args__ = (
         Index("ix_routes_source_destination", "source", "destination"),
         CheckConstraint("source <> destination", name="ck_routes_distinct_endpoints"),
+        CheckConstraint(
+            "distance_km IS NULL OR distance_km > 0",
+            name="ck_routes_positive_distance",
+        ),
+        CheckConstraint(
+            "estimated_duration_minutes IS NULL OR estimated_duration_minutes > 0",
+            name="ck_routes_positive_duration",
+        ),
     )
 
     def to_dict(self, include_stops: bool = True) -> dict:
@@ -35,6 +45,8 @@ class Route(db.Model):
             "name": self.name,
             "source": self.source,
             "destination": self.destination,
+            "distance_km": self.distance_km,
+            "estimated_duration_minutes": self.estimated_duration_minutes,
         }
         if include_stops:
             data["stops"] = [stop.to_dict() for stop in self.stops]
@@ -54,7 +66,10 @@ class RouteStop(db.Model):
         index=True,
     )
     stop_name = db.Column(db.String(120), nullable=False)
+    city_name = db.Column(db.String(100), nullable=True, index=True)
     stop_order = db.Column(db.Integer, nullable=False)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
 
     route = db.relationship("Route", back_populates="stops")
 
@@ -69,5 +84,8 @@ class RouteStop(db.Model):
             "id": self.id,
             "route_id": self.route_id,
             "stop_name": self.stop_name,
+            "city_name": self.city_name or self.stop_name.split("(")[0].strip(),
             "stop_order": self.stop_order,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
         }

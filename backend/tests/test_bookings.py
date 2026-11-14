@@ -44,13 +44,30 @@ def test_valid_booking_pnr_lookup_cancellation_and_rebooking(client, sample_data
     dup_resp = client.post("/api/bookings", json=_valid_payload(sample_data, seat_number="1A"))
     assert dup_resp.status_code == 409
 
-    # Cancel booking -> 200 and releases seat
-    cancel_resp = client.post(f"/api/bookings/{pnr}/cancel")
+    # Unauthorized cancel attempt without verification must return 403 Forbidden
+    unauth_cancel = client.post(f"/api/bookings/{pnr}/cancel")
+    assert unauth_cancel.status_code == 403
+
+    # Wrong email returns 403 Forbidden
+    wrong_email_cancel = client.post(
+        f"/api/bookings/{pnr}/cancel",
+        json={"passenger_email": "wrong@example.com"},
+    )
+    assert wrong_email_cancel.status_code == 403
+
+    # Cancel booking with matching passenger email -> 200 and releases seat
+    cancel_resp = client.post(
+        f"/api/bookings/{pnr}/cancel",
+        json={"passenger_email": "ananya.singh@example.com"},
+    )
     assert cancel_resp.status_code == 200
     assert cancel_resp.get_json()["booking"]["status"] == "CANCELLED"
 
     # Double cancellation returns 409
-    second_cancel = client.post(f"/api/bookings/{pnr}/cancel")
+    second_cancel = client.post(
+        f"/api/bookings/{pnr}/cancel",
+        json={"passenger_email": "ananya.singh@example.com"},
+    )
     assert second_cancel.status_code == 409
 
     # Seat 1A is available again and can be rebooked
