@@ -32,8 +32,8 @@ flowchart TD
         subgraph DockerNet["Isolated Bridge Network (busreserve_net)"]
             Nginx["Nginx 1.27 Reverse Proxy\n(:80 & :443 internal | :8080 & :8443 host)\nTLS 1.2/1.3 Termination, Security Headers & Rate Limiting"]
 
-            Nginx -->|"/" (React SPA)| Frontend["Frontend Container (Nginx Alpine)\n(:80 internal | unexposed)"]
-            Nginx -->|"/api/*"\n"/health/*"\n"/metrics"| Backend["Backend API Container (Flask 3.1 + Gunicorn 23.0)\n(:5000 internal | non-root uid=10001)"]
+            Nginx -->|Root path - React SPA| Frontend["Frontend Container (Nginx Alpine)\n(:80 internal | unexposed)"]
+            Nginx -->|API, health and metrics routes| Backend["Backend API Container (Flask 3.1 + Gunicorn 23.0)\n(:5000 internal | non-root uid=10001)"]
             Backend -->|"SQLAlchemy 2.0 / psycopg2\n(SELECT ... FOR UPDATE)"| Postgres[("PostgreSQL 16 Database\n(:5432 internal | unexposed)")]
             Postgres --- Volume[("Persistent Docker Volume\nbusreserve_pgdata")]
         end
